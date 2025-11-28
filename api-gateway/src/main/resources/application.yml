@@ -1,11 +1,6 @@
 server:
   port: 8080
 
-eureka:
-  client:
-    serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
-
 spring:
   application:
     name: api-gateway
@@ -17,14 +12,19 @@ spring:
           lower-case-service-id: true
       routes:
         - id: vol-service
-          uri: lb://VOL-SERVICE
+          uri: lb://vol-service
           predicates:
             - Path=/vols/**
         - id: hotel-service
-          uri: lb://HOTEL-SERVICE
+          uri: lb://hotel-service
           predicates:
             - Path=/hotels/**
         - id: booking-service
-          uri: lb://BOOKING-SERVICE
+          uri: lb://booking-service
           predicates:
             - Path=/reservations/**
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/

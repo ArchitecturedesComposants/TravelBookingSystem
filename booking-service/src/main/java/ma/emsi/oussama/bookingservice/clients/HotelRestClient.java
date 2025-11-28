@@ -9,8 +9,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 public interface HotelRestClient {
 
     @GetMapping("/hotels/{id}")
-    HotelDTO getHotelDetails(@PathVariable Long id);
+    HotelDTO getHotelDetails(@PathVariable("id") Long id);
 
     @GetMapping("/hotels/{id}/disponibilite/{type}")
-    Boolean verifierDispo(@PathVariable Long id, @PathVariable String type);
+    Boolean verifierDispo(
+            @PathVariable("id") Long id,
+            @PathVariable("type") String type
+    );
 }

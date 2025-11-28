@@ -4,11 +4,19 @@ server:
 spring:
   application:
     name: booking-service
+
+  cloud:
+    config:
+      enabled: false
+  config:
+    import: "optional:classpath:/"
+
   datasource:
     url: jdbc:h2:mem:bookingdb
     driverClassName: org.h2.Driver
     username: sa
     password: password
+
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:

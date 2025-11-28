@@ -9,6 +9,7 @@ import ma.emsi.oussama.bookingservice.enums.StatutReservation;
 import ma.emsi.oussama.bookingservice.repositories.ReservationRepository;
 import ma.emsi.oussama.bookingservice.services.PaiementService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,6 +32,11 @@ public class BookingController {
         this.paiementService = paiementService;
         // WebClient pour le vol-service. L'URI est le nom du service enregistré dans Eureka.
         this.volWebClient = webClientBuilder.baseUrl("http://VOL-SERVICE").build();
+    }
+
+    @GetMapping("/reservations")
+    public String test() {
+        return "Booking service is running!";
     }
 
     @PostMapping("/reservations")
