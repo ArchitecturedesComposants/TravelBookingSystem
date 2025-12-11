@@ -4,32 +4,35 @@ server:
 spring:
   application:
     name: api-gateway
-
-
-
   cloud:
-    config:
-      enabled: false
     gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
       routes:
         - id: vol-service
           uri: lb://vol-service
           predicates:
             - Path=/vols/**
+          filters:
+            - RewritePath=/vols/(?<segment>.*), /vols/vols/${segment}
 
         - id: hotel-service
           uri: lb://hotel-service
           predicates:
             - Path=/hotels/**
+          filters:
+            - RewritePath=/hotels/(?<segment>.*), /hotels/${segment}
 
         - id: booking-service
           uri: lb://booking-service
           predicates:
             - Path=/reservations/**
+          filters:
+            - RewritePath=/reservations/(?<segment>.*), /reservations/${segment}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
 
 eureka:
   instance:

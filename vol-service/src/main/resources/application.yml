@@ -21,11 +21,10 @@ spring:
 
   data:
     rest:
-      base-path: /vols
+      base-path: /
 
 eureka:
   instance:
-    hostname: localhost
     prefer-ip-address: true
   client:
     serviceUrl:
