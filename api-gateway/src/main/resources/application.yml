@@ -11,8 +11,7 @@ spring:
           uri: lb://vol-service
           predicates:
             - Path=/vols/**
-          filters:
-            - RewritePath=/vols/(?<segment>.*), /vols/vols/${segment}
+          # No rewrite needed - direct pass-through
 
         - id: hotel-service
           uri: lb://hotel-service
@@ -21,12 +20,17 @@ spring:
           filters:
             - RewritePath=/hotels/(?<segment>.*), /hotels/${segment}
 
-        - id: booking-service
+        - id: booking-service-base
+          uri: lb://booking-service
+          predicates:
+            - Path=/reservations
+          # Handles POST /reservations
+          
+        - id: booking-service-search
           uri: lb://booking-service
           predicates:
             - Path=/reservations/**
-          filters:
-            - RewritePath=/reservations/(?<segment>.*), /reservations/${segment}
+          # Handles GET /reservations/search/... etc
 
 management:
   endpoints:
