@@ -1,5 +1,6 @@
 package ma.emsi.oussama.bookingservice.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import ma.emsi.oussama.bookingservice.enums.StatutReservation;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -34,4 +35,15 @@ public class Reservation {
     private String flightClass; // Flight class: ECONOMY, BUSINESS, FIRST
     private LocalDate checkInDate; // Hotel check-in date
     private LocalDate checkOutDate; // Hotel check-out date
+
+    // User ownership
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    @JsonIgnore
+    private User user;
+
+    // Expose userId for JSON serialization
+    public Long getUserId() {
+        return user != null ? user.getId() : null;
+    }
 }

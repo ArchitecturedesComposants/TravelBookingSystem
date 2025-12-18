@@ -5,21 +5,21 @@ import ma.emsi.oussama.bookingservice.dtos.HotelDTO;
 import ma.emsi.oussama.bookingservice.dtos.ReservationRequest;
 import ma.emsi.oussama.bookingservice.dtos.VolDTO;
 import ma.emsi.oussama.bookingservice.entities.Reservation;
+import ma.emsi.oussama.bookingservice.entities.User;
 import ma.emsi.oussama.bookingservice.enums.StatutReservation;
 import ma.emsi.oussama.bookingservice.repositories.ReservationRepository;
 import ma.emsi.oussama.bookingservice.services.PaiementService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 public class BookingController {
@@ -34,31 +34,67 @@ public class BookingController {
         this.reservationRepository = reservationRepository;
         this.hotelRestClient = hotelRestClient;
         this.paiementService = paiementService;
-        // WebClient pour le vol-service. L'URI est le nom du service enregistré dans
-        // Eureka.
         this.volWebClient = webClientBuilder.baseUrl("http://VOL-SERVICE").build();
     }
 
-    @GetMapping("/reservations")
-    public String test() {
-        return "Booking service is running!";
+    /**
+     * Get current authenticated user from SecurityContext
+     */
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof User) {
+            return (User) authentication.getPrincipal();
+        }
+        return null;
     }
 
-    @GetMapping("/reservations/search/findByClientEmail")
-    public ResponseEntity<List<Reservation>> getReservationsByEmail(@RequestParam("clientEmail") String clientEmail) {
-        List<Reservation> reservations = reservationRepository.findByClientEmail(clientEmail);
+    @GetMapping("/reservations")
+    public ResponseEntity<?> test() {
+        return ResponseEntity.ok(Collections.singletonMap("message", "Booking service is running!"));
+    }
+
+    /**
+     * Get all reservations for the current authenticated user
+     */
+    @GetMapping("/reservations/my")
+    public ResponseEntity<List<Reservation>> getMyReservations() {
+        User user = getCurrentUser();
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        List<Reservation> reservations = reservationRepository.findByUser_Id(user.getId());
         return ResponseEntity.ok(reservations);
     }
 
+    /**
+     * Get reservation by ID - with ownership check
+     */
     @GetMapping("/reservations/{id}")
-    public ResponseEntity<Reservation> getReservationById(@PathVariable("id") Long id) {
+    public ResponseEntity<?> getReservationById(@PathVariable("id") Long id) {
+        User user = getCurrentUser();
+        if (user == null) {
+            return ResponseEntity.status(401).body(Collections.singletonMap("error", "Not authenticated"));
+        }
+
         return reservationRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(reservation -> {
+                    // Check ownership
+                    if (reservation.getUser() == null || !reservation.getUser().getId().equals(user.getId())) {
+                        return ResponseEntity.status(403).body(Collections.singletonMap("error", "Access denied"));
+                    }
+                    return ResponseEntity.ok(reservation);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/reservations")
-    public ResponseEntity<Reservation> creerReservation(@RequestBody ReservationRequest request) {
+    public ResponseEntity<?> creerReservation(@RequestBody ReservationRequest request) {
+        // Get authenticated user
+        User user = getCurrentUser();
+        if (user == null) {
+            return ResponseEntity.status(401).body(Collections.singletonMap("error", "Authentication required"));
+        }
+
         BigDecimal montantTotal = BigDecimal.ZERO;
         VolDTO vol = null;
         HotelDTO hotel = null;
@@ -75,25 +111,22 @@ public class BookingController {
                 if (vol != null && vol.getPlacesDisponibles() > 0) {
                     montantTotal = montantTotal.add(vol.getPrix());
                 } else {
-                    // Vol not available - only fail if this was the primary booking item
                     if (request.getHotelId() == null || request.getHotelId() <= 0) {
-                        return ResponseEntity.badRequest().build();
+                        return ResponseEntity.badRequest()
+                                .body(Collections.singletonMap("error", "Flight not available"));
                     }
-                    // Otherwise continue with hotel-only booking
                     vol = null;
                 }
             } catch (Exception e) {
-                // If vol-service is unavailable and this is flight-only booking, fail
                 if (request.getHotelId() == null || request.getHotelId() <= 0) {
-                    return ResponseEntity.badRequest().build();
+                    return ResponseEntity.badRequest()
+                            .body(Collections.singletonMap("error", "Flight service unavailable"));
                 }
-                // Otherwise continue with hotel-only booking
                 vol = null;
             }
         }
 
-        // 2. Récupération des détails de l'Hôtel et vérification de la disponibilité
-        // (via FeignClient)
+        // 2. Récupération des détails de l'Hôtel
         if (request.getHotelId() != null && request.getHotelId() > 0) {
             try {
                 hotel = hotelRestClient.getHotelDetails(request.getHotelId());
@@ -102,66 +135,54 @@ public class BookingController {
                 if (hotel != null && Boolean.TRUE.equals(hotelDispo)) {
                     montantTotal = montantTotal.add(hotel.getPrixParNuit());
                 } else {
-                    // Hotel not available - only fail if this was the primary booking item
                     if (vol == null) {
-                        return ResponseEntity.badRequest().build();
+                        return ResponseEntity.badRequest()
+                                .body(Collections.singletonMap("error", "Hotel not available"));
                     }
-                    // Otherwise continue with flight-only booking
                     hotel = null;
                 }
             } catch (Exception e) {
-                // If hotel-service is unavailable and this is hotel-only booking, fail
                 if (vol == null) {
-                    return ResponseEntity.badRequest().build();
+                    return ResponseEntity.badRequest()
+                            .body(Collections.singletonMap("error", "Hotel service unavailable"));
                 }
-                // Otherwise continue with flight-only booking
                 hotel = null;
             }
         }
 
-        // Ensure at least one item was successfully booked
         if (vol == null && hotel == null) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "No booking items available"));
         }
 
-        // 3. Calcul du montant total déjà effectué ci-dessus
-
-        // 4. Création de la réservation en attente de paiement
+        // 3. Création de la réservation
         Reservation reservation = new Reservation();
         reservation.setDateReservation(LocalDateTime.now());
-        reservation.setClientEmail(request.getClientEmail());
+        reservation.setClientEmail(user.getEmail()); // Use authenticated user's email
         reservation.setStatutReservation(StatutReservation.EN_ATTENTE_PAIEMENT);
         reservation.setVolId(request.getVolId());
         reservation.setHotelId(request.getHotelId());
         reservation.setMontantTotal(montantTotal);
+        reservation.setUser(user); // Set user ownership
 
-        // Set new booking details
+        // Set booking details
         reservation.setPassengerName(request.getPassengerName());
         reservation.setTypeChambre(request.getTypeChambre());
         reservation.setSeatNumber(request.getSeatNumber());
         reservation.setFlightClass(request.getFlightClass());
         reservation.setCheckInDate(request.getCheckInDate());
         reservation.setCheckOutDate(request.getCheckOutDate());
+
         reservation = reservationRepository.save(reservation);
 
-        // 5. Paiement (via PaiementService)
+        // 4. Paiement
         try {
             String transactionId = paiementService.payer(montantTotal);
-
-            // 6. Confirmation et mise à jour
             reservation.setTransactionPaiementId(transactionId);
             reservation.setStatutReservation(StatutReservation.CONFIRMEE);
-
-            // TODO: Ajouter ici la logique pour décrémenter les places dans vol-service et
-            // marquer la chambre comme non disponible dans hotel-service.
-
             return ResponseEntity.ok(reservationRepository.save(reservation));
-
         } catch (Exception e) {
-            // 7. Annulation/Compensation en cas d'échec de paiement
             reservation.setStatutReservation(StatutReservation.ANNULEE);
             reservationRepository.save(reservation);
-            // On retourne la réservation annulée avec un statut d'erreur
             return ResponseEntity.status(500).body(reservation);
         }
     }

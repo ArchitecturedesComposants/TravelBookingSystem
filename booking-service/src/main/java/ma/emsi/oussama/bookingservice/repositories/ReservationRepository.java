@@ -10,4 +10,6 @@ import java.util.List;
 @RepositoryRestResource
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
     List<Reservation> findByClientEmail(@Param("clientEmail") String clientEmail);
+
+    List<Reservation> findByUser_Id(Long userId);
 }

@@ -32,6 +32,12 @@ spring:
             - Path=/reservations/**
           # Handles GET /reservations/search/... etc
 
+        - id: auth-service
+          uri: lb://booking-service
+          predicates:
+            - Path=/auth/**
+          # Handles authentication endpoints (register, login, me)
+
 management:
   endpoints:
     web:
